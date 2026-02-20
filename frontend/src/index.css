@@ -1,0 +1,28 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Outfit', ui-sans-serif, system-ui, sans-serif;
+}
+
+:root {
+  --primary: #6B8E6B;
+  --primary-dark: #4A6B4A;
+  --primary-light: #D4E4D4;
+  --background: #F5F5F0;
+  --surface: #FAFAF7;
+  --surface-alt: #F0F0E8;
+  --text: #2D3B2D;
+  --text-muted: #6B7B6B;
+  --border: #D8DCD0;
+}
+
+html, body {
+  font-family: 'Outfit', ui-sans-serif, system-ui, sans-serif;
+  background: var(--background);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+* {
+  font-family: inherit;
+}

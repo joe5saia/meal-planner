@@ -1,0 +1,182 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { GroceryList } from './GroceryList';
+import { api } from '../api/client';
+
+vi.mock('../api/client', () => ({
+  api: {
+    grocery: {
+      generate: vi.fn(),
+    },
+  },
+}));
+
+const mockGroceryList = {
+  items: [
+    { name: 'apple', quantity: '3', unit: null, category: 'Produce', original_strings: ['3 apples'] },
+    { name: 'butter', quantity: '1', unit: 'cup', category: 'Dairy', original_strings: ['1 cup butter'] },
+    { name: 'chicken breast', quantity: '2', unit: 'pound', category: 'Meat & Seafood', original_strings: ['2 pounds chicken breast'] },
+    { name: 'cumin', quantity: '1', unit: 'teaspoon', category: 'Spices & Seasonings', original_strings: ['1 teaspoon cumin'] },
+  ],
+  recipe_count: 2,
+  recipe_titles: ['Recipe One', 'Recipe Two'],
+};
+
+describe('GroceryList', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (api.grocery.generate as ReturnType<typeof vi.fn>).mockResolvedValue(mockGroceryList);
+  });
+
+  it('renders empty state when no recipe IDs provided', () => {
+    render(<GroceryList />);
+    expect(screen.getByText(/select recipes from the weekly planner/i)).toBeInTheDocument();
+  });
+
+  it('fetches and displays grocery list when recipe IDs provided', async () => {
+    render(<GroceryList recipeIds={[1, 2]} />);
+    
+    await waitFor(() => {
+      expect(screen.getByText(/apple/i)).toBeInTheDocument();
+    });
+    
+    expect(screen.getByText(/butter/i)).toBeInTheDocument();
+    expect(screen.getByText(/chicken breast/i)).toBeInTheDocument();
+    expect(screen.getByText(/cumin/i)).toBeInTheDocument();
+  });
+
+  it('displays item in correct format: name (quantity unit)', async () => {
+    render(<GroceryList recipeIds={[1, 2]} />);
+    
+    await waitFor(() => {
+      expect(screen.getByText(/butter \(1 cup\)/i)).toBeInTheDocument();
+    });
+  });
+
+  it('deletes item when X button is clicked', async () => {
+    const user = userEvent.setup();
+    render(<GroceryList recipeIds={[1, 2]} />);
+    
+    await waitFor(() => {
+      expect(screen.getByText(/apple/i)).toBeInTheDocument();
+    });
+    
+    const appleRow = screen.getByText(/apple/i).closest('div[class*="flex items-start"]');
+    const deleteButton = appleRow?.querySelector('button');
+    
+    if (deleteButton) {
+      await user.click(deleteButton);
+    }
+    
+    await waitFor(() => {
+      expect(screen.queryByText(/apple \(3\)/i)).not.toBeInTheDocument();
+    });
+  });
+
+  it('shows removed items count after deletion', async () => {
+    const user = userEvent.setup();
+    render(<GroceryList recipeIds={[1, 2]} />);
+    
+    await waitFor(() => {
+      expect(screen.getByText(/apple/i)).toBeInTheDocument();
+    });
+    
+    const appleRow = screen.getByText(/apple/i).closest('div[class*="flex items-start"]');
+    const deleteButton = appleRow?.querySelector('button');
+    
+    if (deleteButton) {
+      await user.click(deleteButton);
+    }
+    
+    await waitFor(() => {
+      expect(screen.getByText(/1 item\(s\) removed/i)).toBeInTheDocument();
+    });
+  });
+
+  it('sorts items alphabetically ascending by default', async () => {
+    render(<GroceryList recipeIds={[1, 2]} />);
+    
+    await waitFor(() => {
+      expect(screen.getByText(/apple/i)).toBeInTheDocument();
+    });
+    
+    const items = screen.getAllByRole('checkbox');
+    const parent0 = items[0].closest('div[class*="flex items-start"]');
+    const parent1 = items[1].closest('div[class*="flex items-start"]');
+    
+    expect(parent0?.textContent).toContain('apple');
+    expect(parent1?.textContent).toContain('butter');
+  });
+
+  it('sorts items alphabetically descending when Z-A selected', async () => {
+    const user = userEvent.setup();
+    render(<GroceryList recipeIds={[1, 2]} />);
+    
+    await waitFor(() => {
+      expect(screen.getByText(/apple/i)).toBeInTheDocument();
+    });
+    
+    const sortSelect = screen.getByRole('combobox');
+    await user.selectOptions(sortSelect, 'alpha-desc');
+    
+    const items = screen.getAllByRole('checkbox');
+    const parent0 = items[0].closest('div[class*="flex items-start"]');
+    
+    expect(parent0?.textContent).toContain('cumin');
+  });
+
+  it('groups items by store section when By Store Section selected', async () => {
+    const user = userEvent.setup();
+    render(<GroceryList recipeIds={[1, 2]} />);
+    
+    await waitFor(() => {
+      expect(screen.getByText(/apple/i)).toBeInTheDocument();
+    });
+    
+    const sortSelect = screen.getByRole('combobox');
+    await user.selectOptions(sortSelect, 'by-section');
+    
+    expect(screen.getByText('Produce')).toBeInTheDocument();
+    expect(screen.getByText('Dairy')).toBeInTheDocument();
+    expect(screen.getByText('Meat & Seafood')).toBeInTheDocument();
+    expect(screen.getByText('Spices & Seasonings')).toBeInTheDocument();
+  });
+
+  it('toggles item checked state when checkbox clicked', async () => {
+    const user = userEvent.setup();
+    render(<GroceryList recipeIds={[1, 2]} />);
+    
+    await waitFor(() => {
+      expect(screen.getByText(/apple/i)).toBeInTheDocument();
+    });
+    
+    const checkboxes = screen.getAllByRole('checkbox');
+    expect(checkboxes[0]).not.toBeChecked();
+    
+    await user.click(checkboxes[0]);
+    expect(checkboxes[0]).toBeChecked();
+    
+    expect(screen.getByText(/1 of 4 items checked/i)).toBeInTheDocument();
+  });
+
+  it('updates item count correctly after deletions', async () => {
+    const user = userEvent.setup();
+    render(<GroceryList recipeIds={[1, 2]} />);
+    
+    await waitFor(() => {
+      expect(screen.getByText(/0 of 4 items checked/i)).toBeInTheDocument();
+    });
+    
+    const appleRow = screen.getByText(/apple/i).closest('div[class*="flex items-start"]');
+    const deleteButton = appleRow?.querySelector('button');
+    
+    if (deleteButton) {
+      await user.click(deleteButton);
+    }
+    
+    await waitFor(() => {
+      expect(screen.getByText(/0 of 3 items checked/i)).toBeInTheDocument();
+    });
+  });
+});

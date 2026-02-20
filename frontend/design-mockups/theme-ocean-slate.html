@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Meal Planner - Ocean Slate Theme</title>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --primary: #1E6B7B;
+      --primary-dark: #145563;
+      --primary-light: #D0E8ED;
+      --background: #F0F4F5;
+      --surface: #FFFFFF;
+      --surface-alt: #F7FAFB;
+      --text: #1F2937;
+      --text-muted: #64748B;
+      --border: #E2E8F0;
+      --accent-teal: #0D9488;
+      --accent-amber: #D97706;
+      --accent-rose: #E11D48;
+      --accent-violet: #7C3AED;
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background: var(--background);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    .app {
+      display: flex;
+      min-height: 100vh;
+    }
+
+    .sidebar {
+      width: 200px;
+      background: linear-gradient(180deg, var(--primary) 0%, var(--primary-dark) 100%);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+
+    .logo {
+      padding: 20px 16px;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .logo h1 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: white;
+    }
+
+    .nav {
+      padding: 12px 8px;
+      flex: 1;
+    }
+
+    .nav-item {
+      display: block;
+      width: 100%;
+      padding: 10px 12px;
+      border: none;
+      background: none;
+      text-align: left;
+      font-family: inherit;
+      font-size: 0.85rem;
+      color: rgba(255,255,255,0.7);
+      border-radius: 6px;
+      cursor: pointer;
+      margin-bottom: 2px;
+      transition: all 0.15s;
+    }
+
+    .nav-item:hover {
+      background: rgba(255,255,255,0.1);
+      color: white;
+    }
+
+    .nav-item.active {
+      background: rgba(255,255,255,0.2);
+      color: white;
+      font-weight: 600;
+    }
+
+    .main {
+      flex: 1;
+      padding: 20px;
+      overflow: auto;
+    }
+
+    .card {
+      background: var(--surface);
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+      padding: 20px;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .header h2 {
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .header-controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .week-toggle {
+      display: flex;
+      background: var(--surface-alt);
+      border-radius: 6px;
+      padding: 2px;
+    }
+
+    .week-toggle button {
+      padding: 5px 10px;
+      border: none;
+      background: transparent;
+      font-family: inherit;
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-radius: 4px;
+    }
+
+    .week-toggle button.active {
+      background: var(--primary);
+      color: white;
+    }
+
+    .date-nav {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .date-nav button {
+      padding: 6px 10px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+
+    .date-nav button:hover {
+      background: var(--surface-alt);
+    }
+
+    .date-nav span {
+      font-weight: 600;
+      font-size: 0.95rem;
+      color: var(--text);
+      min-width: 140px;
+      text-align: center;
+    }
+
+    .calendar-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 6px;
+      margin-bottom: 16px;
+    }
+
+    .day-cell {
+      background: var(--surface-alt);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px;
+      min-height: 130px;
+    }
+
+    .day-cell.today {
+      border-color: var(--primary);
+      border-width: 2px;
+    }
+
+    .day-cell.selected {
+      background: var(--primary-light);
+      border-color: var(--primary);
+    }
+
+    .day-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+
+    .day-name {
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .day-date {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-left: 4px;
+    }
+
+    .day-checkbox {
+      width: 14px;
+      height: 14px;
+      accent-color: var(--primary);
+    }
+
+    .meal-item {
+      font-size: 0.7rem;
+      padding: 5px 6px;
+      border-radius: 4px;
+      margin-bottom: 3px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-weight: 500;
+    }
+
+    .meal-item.breakfast { background: #FEF3C7; color: #92400E; }
+    .meal-item.lunch { background: #DBEAFE; color: #1E40AF; }
+    .meal-item.dinner { background: var(--primary-light); color: var(--primary-dark); }
+    .meal-item.dessert { background: #FCE7F3; color: #9D174D; }
+
+    .meal-type {
+      font-size: 0.6rem;
+      font-weight: 700;
+      opacity: 0.8;
+    }
+
+    .meal-title {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .add-meal {
+      width: 100%;
+      padding: 5px;
+      margin-top: 4px;
+      border: 1px dashed var(--border);
+      border-radius: 4px;
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 0.65rem;
+      cursor: pointer;
+      font-family: inherit;
+    }
+
+    .add-meal:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    .footer-actions {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+
+    .select-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    .select-actions button {
+      background: none;
+      border: none;
+      color: var(--primary);
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 0.8rem;
+      font-weight: 500;
+    }
+
+    .select-actions button:hover {
+      text-decoration: underline;
+    }
+
+    .btn-primary {
+      padding: 8px 16px;
+      background: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-family: inherit;
+      font-weight: 600;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .btn-primary:hover {
+      background: var(--primary-dark);
+    }
+
+    .btn-primary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .view { display: none; }
+    .view.active { display: block; }
+
+    /* Grocery List Styles */
+    .grocery-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .grocery-controls {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .grocery-controls select {
+      padding: 6px 10px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-family: inherit;
+      font-size: 0.8rem;
+      background: var(--surface);
+    }
+
+    .btn-danger {
+      padding: 6px 12px;
+      background: var(--accent-rose);
+      color: white;
+      border: none;
+      border-radius: 4px;
+      font-family: inherit;
+      font-weight: 500;
+      font-size: 0.8rem;
+      cursor: pointer;
+    }
+
+    .grocery-section {
+      margin-bottom: 16px;
+    }
+
+    .grocery-section h3 {
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--primary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 6px 0;
+      border-bottom: 2px solid var(--primary-light);
+      margin-bottom: 6px;
+    }
+
+    .grocery-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 0;
+    }
+
+    .grocery-item input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--primary);
+    }
+
+    .grocery-item.checked .grocery-text {
+      text-decoration: line-through;
+      color: var(--text-muted);
+    }
+
+    .grocery-text {
+      flex: 1;
+      font-size: 0.85rem;
+    }
+
+    .grocery-qty {
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      font-weight: 500;
+    }
+
+    .grocery-delete {
+      opacity: 0;
+      border: none;
+      background: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 2px;
+    }
+
+    .grocery-item:hover .grocery-delete {
+      opacity: 1;
+    }
+
+    .grocery-footer {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    /* Recipe Box Styles */
+    .recipe-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px;
+    }
+
+    .recipe-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      transition: all 0.15s;
+    }
+
+    .recipe-card:hover {
+      border-color: var(--primary);
+      box-shadow: 0 4px 12px rgba(30, 107, 123, 0.1);
+    }
+
+    .recipe-image {
+      height: 100px;
+      background: linear-gradient(135deg, var(--primary-light), #E0F2FE);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2rem;
+    }
+
+    .recipe-content {
+      padding: 10px;
+    }
+
+    .recipe-title {
+      font-weight: 600;
+      font-size: 0.9rem;
+      margin-bottom: 4px;
+      color: var(--text);
+    }
+
+    .recipe-meta {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      display: flex;
+      gap: 10px;
+    }
+
+    .recipe-actions {
+      display: flex;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .recipe-actions button {
+      flex: 1;
+      padding: 5px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: var(--surface);
+      font-family: inherit;
+      font-size: 0.7rem;
+      font-weight: 500;
+      cursor: pointer;
+      color: var(--text-muted);
+    }
+
+    .recipe-actions button:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    .sort-bar {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 14px;
+      align-items: center;
+    }
+
+    .sort-bar select {
+      padding: 6px 10px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-family: inherit;
+      font-size: 0.8rem;
+      background: var(--surface);
+    }
+
+    .search-box {
+      flex: 1;
+      max-width: 280px;
+      padding: 6px 10px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-family: inherit;
+      font-size: 0.85rem;
+    }
+
+    .search-box:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+
+    .recipe-source {
+      font-size: 0.7rem;
+      color: var(--primary);
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="logo">
+        <h1>Meal Planner</h1>
+      </div>
+      <nav class="nav">
+        <button class="nav-item" onclick="showView('search')">Add Recipe</button>
+        <button class="nav-item" onclick="showView('box')">Recipe Box</button>
+        <button class="nav-item active" onclick="showView('planner')">Weekly Planner</button>
+        <button class="nav-item" onclick="showView('grocery')">Grocery List</button>
+      </nav>
+    </aside>
+
+    <main class="main">
+      <!-- Weekly Planner View -->
+      <div id="planner" class="view active">
+        <div class="card">
+          <div class="header">
+            <div style="display: flex; align-items: center; gap: 14px;">
+              <h2>Weekly Planner</h2>
+              <div class="week-toggle">
+                <button class="active">1W</button>
+                <button>2W</button>
+                <button>3W</button>
+                <button>4W</button>
+              </div>
+            </div>
+            <div class="date-nav">
+              <button>←</button>
+              <span>Feb 15 - Feb 21</span>
+              <button>→</button>
+            </div>
+          </div>
+
+          <div class="calendar-grid">
+            <div class="day-cell selected">
+              <div class="day-header">
+                <span><span class="day-name">Sat</span><span class="day-date">15</span></span>
+                <input type="checkbox" class="day-checkbox" checked>
+              </div>
+              <div class="meal-item breakfast"><span class="meal-type">B</span><span class="meal-title">Avocado Toast</span></div>
+              <div class="meal-item dinner"><span class="meal-type">D</span><span class="meal-title">Pasta Primavera</span></div>
+              <button class="add-meal">+ Add meal</button>
+            </div>
+
+            <div class="day-cell">
+              <div class="day-header">
+                <span><span class="day-name">Sun</span><span class="day-date">16</span></span>
+                <input type="checkbox" class="day-checkbox">
+              </div>
+              <div class="meal-item lunch"><span class="meal-type">L</span><span class="meal-title">Caesar Salad</span></div>
+              <div class="meal-item dinner"><span class="meal-type">D</span><span class="meal-title">Grilled Salmon</span></div>
+              <button class="add-meal">+ Add meal</button>
+            </div>
+
+            <div class="day-cell selected">
+              <div class="day-header">
+                <span><span class="day-name">Mon</span><span class="day-date">17</span></span>
+                <input type="checkbox" class="day-checkbox" checked>
+              </div>
+              <div class="meal-item dinner"><span class="meal-type">D</span><span class="meal-title">Chicken Stir Fry</span></div>
+              <button class="add-meal">+ Add meal</button>
+            </div>
+
+            <div class="day-cell today selected">
+              <div class="day-header">
+                <span><span class="day-name">Tue</span><span class="day-date">18</span></span>
+                <input type="checkbox" class="day-checkbox" checked>
+              </div>
+              <div class="meal-item breakfast"><span class="meal-type">B</span><span class="meal-title">Smoothie Bowl</span></div>
+              <div class="meal-item lunch"><span class="meal-type">L</span><span class="meal-title">Turkey Wrap</span></div>
+              <div class="meal-item dinner"><span class="meal-type">D</span><span class="meal-title">Beef Tacos</span></div>
+              <button class="add-meal">+ Add meal</button>
+            </div>
+
+            <div class="day-cell">
+              <div class="day-header">
+                <span><span class="day-name">Wed</span><span class="day-date">19</span></span>
+                <input type="checkbox" class="day-checkbox">
+              </div>
+              <div class="meal-item dinner"><span class="meal-type">D</span><span class="meal-title">Veggie Curry</span></div>
+              <div class="meal-item dessert"><span class="meal-type">De</span><span class="meal-title">Chocolate Cake</span></div>
+              <button class="add-meal">+ Add meal</button>
+            </div>
+
+            <div class="day-cell selected">
+              <div class="day-header">
+                <span><span class="day-name">Thu</span><span class="day-date">20</span></span>
+                <input type="checkbox" class="day-checkbox" checked>
+              </div>
+              <div class="meal-item dinner"><span class="meal-type">D</span><span class="meal-title">Fish & Chips</span></div>
+              <button class="add-meal">+ Add meal</button>
+            </div>
+
+            <div class="day-cell">
+              <div class="day-header">
+                <span><span class="day-name">Fri</span><span class="day-date">21</span></span>
+                <input type="checkbox" class="day-checkbox">
+              </div>
+              <div class="meal-item lunch"><span class="meal-type">L</span><span class="meal-title">Grain Bowl</span></div>
+              <div class="meal-item dinner"><span class="meal-type">D</span><span class="meal-title">Pizza Night</span></div>
+              <button class="add-meal">+ Add meal</button>
+            </div>
+          </div>
+
+          <div class="footer-actions">
+            <div class="select-actions">
+              <button>Select All</button>
+              <span style="color: var(--border);">|</span>
+              <button>Deselect All</button>
+              <span style="margin-left: 8px;">4 days selected</span>
+            </div>
+            <button class="btn-primary">Generate Grocery List (4 days, 8 meals)</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Grocery List View -->
+      <div id="grocery" class="view">
+        <div class="card">
+          <div class="grocery-header">
+            <h2>Grocery List</h2>
+            <div class="grocery-controls">
+              <button class="btn-danger">Delete Checked (3)</button>
+              <select>
+                <option>A to Z</option>
+                <option>Z to A</option>
+                <option selected>By Store Section</option>
+              </select>
+              <button style="background: none; border: none; color: var(--primary); cursor: pointer; font-size: 0.8rem; font-weight: 500;">Copy</button>
+            </div>
+          </div>
+
+          <p style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 14px;">From 4 recipe(s): Pasta Primavera, Grilled Salmon, Chicken Stir Fry, Beef Tacos</p>
+
+          <div class="grocery-section">
+            <h3>Produce</h3>
+            <div class="grocery-item checked">
+              <input type="checkbox" checked>
+              <span class="grocery-text">Avocado</span>
+              <span class="grocery-qty">(2)</span>
+              <button class="grocery-delete">×</button>
+            </div>
+            <div class="grocery-item">
+              <input type="checkbox">
+              <span class="grocery-text">Bell Peppers</span>
+              <span class="grocery-qty">(3)</span>
+              <button class="grocery-delete">×</button>
+            </div>
+            <div class="grocery-item">
+              <input type="checkbox">
+              <span class="grocery-text">Broccoli</span>
+              <span class="grocery-qty">(1 head)</span>
+              <button class="grocery-delete">×</button>
+            </div>
+            <div class="grocery-item checked">
+              <input type="checkbox" checked>
+              <span class="grocery-text">Garlic</span>
+              <span class="grocery-qty">(1 head)</span>
+              <button class="grocery-delete">×</button>
+            </div>
+            <div class="grocery-item">
+              <input type="checkbox">
+              <span class="grocery-text">Onions</span>
+              <span class="grocery-qty">(2)</span>
+              <button class="grocery-delete">×</button>
+            </div>
+            <div class="grocery-item">
+              <input type="checkbox">
+              <span class="grocery-text">Tomatoes</span>
+              <span class="grocery-qty">(4)</span>
+              <button class="grocery-delete">×</button>
+            </div>
+          </div>
+
+          <div class="grocery-section">
+            <h3>Meat & Seafood</h3>
+            <div class="grocery-item">
+              <input type="checkbox">
+              <span class="grocery-text">Chicken Breast</span>
+              <span class="grocery-qty">(1.5 lbs)</span>
+              <button class="grocery-delete">×</button>
+            </div>
+            <div class="grocery-item">
+              <input type="checkbox">
+              <span class="grocery-text">Ground Beef</span>
+              <span class="grocery-qty">(1 lb)</span>
+              <button class="grocery-delete">×</button>
+            </div>
+            <div class="grocery-item checked">
+              <input type="checkbox" checked>
+              <span class="grocery-text">Salmon Fillet</span>
+              <span class="grocery-qty">(2 pieces)</span>
+              <button class="grocery-delete">×</button>
+            </div>
+          </div>
+
+          <div class="grocery-section">
+            <h3>Dairy</h3>
+            <div class="grocery-item">
+              <input type="checkbox">
+              <span class="grocery-text">Butter</span>
+              <span class="grocery-qty">(1 stick)</span>
+              <button class="grocery-delete">×</button>
+            </div>
+            <div class="grocery-item">
+              <input type="checkbox">
+              <span class="grocery-text">Cheddar Cheese</span>
+              <span class="grocery-qty">(8 oz)</span>
+              <button class="grocery-delete">×</button>
+            </div>
+            <div class="grocery-item">
+              <input type="checkbox">
+              <span class="grocery-text">Sour Cream</span>
+              <span class="grocery-qty">(1 cup)</span>
+              <button class="grocery-delete">×</button>
+            </div>
+          </div>
+
+          <div class="grocery-section">
+            <h3>Pantry</h3>
+            <div class="grocery-item">
+              <input type="checkbox">
+              <span class="grocery-text">Olive Oil</span>
+              <span class="grocery-qty">(as needed)</span>
+              <button class="grocery-delete">×</button>
+            </div>
+            <div class="grocery-item">
+              <input type="checkbox">
+              <span class="grocery-text">Pasta</span>
+              <span class="grocery-qty">(1 lb)</span>
+              <button class="grocery-delete">×</button>
+            </div>
+            <div class="grocery-item">
+              <input type="checkbox">
+              <span class="grocery-text">Taco Shells</span>
+              <span class="grocery-qty">(12 count)</span>
+              <button class="grocery-delete">×</button>
+            </div>
+          </div>
+
+          <div class="grocery-footer">
+            <span>3 of 15 items checked</span>
+            <span>0 item(s) removed</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recipe Box View -->
+      <div id="box" class="view">
+        <div class="card">
+          <div class="header">
+            <h2>Recipe Box</h2>
+          </div>
+
+          <div class="sort-bar">
+            <input type="text" class="search-box" placeholder="Search recipes...">
+            <select>
+              <option>Recently Added</option>
+              <option>A to Z</option>
+              <option>Z to A</option>
+            </select>
+          </div>
+
+          <div class="recipe-grid">
+            <div class="recipe-card">
+              <div class="recipe-image">🍝</div>
+              <div class="recipe-content">
+                <div class="recipe-title">Pasta Primavera</div>
+                <div class="recipe-meta">
+                  <span>30 min</span>
+                  <span>4 servings</span>
+                </div>
+                <div class="recipe-source">Smitten Kitchen</div>
+                <div class="recipe-actions">
+                  <button>View</button>
+                  <button>Add to Plan</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="recipe-card">
+              <div class="recipe-image">🐟</div>
+              <div class="recipe-content">
+                <div class="recipe-title">Grilled Salmon</div>
+                <div class="recipe-meta">
+                  <span>25 min</span>
+                  <span>2 servings</span>
+                </div>
+                <div class="recipe-source">Ambitious Kitchen</div>
+                <div class="recipe-actions">
+                  <button>View</button>
+                  <button>Add to Plan</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="recipe-card">
+              <div class="recipe-image">🍗</div>
+              <div class="recipe-content">
+                <div class="recipe-title">Chicken Stir Fry</div>
+                <div class="recipe-meta">
+                  <span>20 min</span>
+                  <span>4 servings</span>
+                </div>
+                <div class="recipe-source">Ambitious Kitchen</div>
+                <div class="recipe-actions">
+                  <button>View</button>
+                  <button>Add to Plan</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="recipe-card">
+              <div class="recipe-image">🌮</div>
+              <div class="recipe-content">
+                <div class="recipe-title">Beef Tacos</div>
+                <div class="recipe-meta">
+                  <span>25 min</span>
+                  <span>6 servings</span>
+                </div>
+                <div class="recipe-source">Smitten Kitchen</div>
+                <div class="recipe-actions">
+                  <button>View</button>
+                  <button>Add to Plan</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="recipe-card">
+              <div class="recipe-image">🍛</div>
+              <div class="recipe-content">
+                <div class="recipe-title">Veggie Curry</div>
+                <div class="recipe-meta">
+                  <span>35 min</span>
+                  <span>4 servings</span>
+                </div>
+                <div class="recipe-source">Ambitious Kitchen</div>
+                <div class="recipe-actions">
+                  <button>View</button>
+                  <button>Add to Plan</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="recipe-card">
+              <div class="recipe-image">🍕</div>
+              <div class="recipe-content">
+                <div class="recipe-title">Homemade Pizza</div>
+                <div class="recipe-meta">
+                  <span>45 min</span>
+                  <span>4 servings</span>
+                </div>
+                <div class="recipe-source">Smitten Kitchen</div>
+                <div class="recipe-actions">
+                  <button>View</button>
+                  <button>Add to Plan</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Add Recipe View -->
+      <div id="search" class="view">
+        <div class="card">
+          <div class="header">
+            <h2>Add Recipe</h2>
+          </div>
+          <div style="max-width: 480px;">
+            <p style="color: var(--text-muted); margin-bottom: 14px; font-size: 0.9rem;">Paste a recipe URL to import it into your recipe box.</p>
+            <div style="display: flex; gap: 10px;">
+              <input type="text" class="search-box" style="flex: 1; max-width: none;" placeholder="https://example.com/recipe...">
+              <button class="btn-primary">Import</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    function showView(viewId) {
+      document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+      document.getElementById(viewId).classList.add('active');
+      event.target.classList.add('active');
+    }
+  </script>
+</body>
+</html>
