@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { WeeklyPlanner, type WeekCount } from './WeeklyPlanner';
+import { WeeklyPlanner } from './WeeklyPlanner';
 import { api } from '../api/client';
 
 vi.mock('../api/client', () => ({

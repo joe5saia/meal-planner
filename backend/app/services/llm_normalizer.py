@@ -1,11 +1,12 @@
 """LLM-based ingredient normalization with caching."""
-import os
+
 import json
+import os
+
 from openai import AsyncOpenAI
 from sqlalchemy.orm import Session
 
 from ..models import IngredientCache
-
 
 SYSTEM_PROMPT = """You are an ingredient normalizer for a grocery list app. Given a list of raw ingredient strings, return a JSON array where each element has:
 - "original": the original ingredient string (exactly as provided)
@@ -34,32 +35,37 @@ async def normalize_with_llm(ingredients: list[str]) -> list[dict]:
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         raise ValueError("OPENAI_API_KEY environment variable not set")
-    
+
     client = AsyncOpenAI(api_key=api_key)
-    
+
     user_message = "Normalize these ingredients:\n" + "\n".join(f"- {ing}" for ing in ingredients)
-    
+
     response = await client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_message}
+            {"role": "user", "content": user_message},
         ],
         temperature=0,
-        response_format={"type": "json_object"}
+        response_format={"type": "json_object"},
     )
-    
+
     content = response.choices[0].message.content
+    if content is None:
+        raise ValueError("LLM returned an empty response")
+
     try:
         result = json.loads(content)
         if isinstance(result, dict) and "ingredients" in result:
             return result["ingredients"]
-        elif isinstance(result, list):
+        if isinstance(result, list):
             return result
-        else:
-            return list(result.values())[0] if result else []
+        return next(iter(result.values())) if result else []
     except json.JSONDecodeError:
-        return [{"original": ing, "canonical_name": ing.lower(), "category": "Other"} for ing in ingredients]
+        return [
+            {"original": ing, "canonical_name": ing.lower(), "category": "Other"}
+            for ing in ingredients
+        ]
 
 
 def get_cached_ingredients(db: Session, ingredients: list[str]) -> dict[str, dict]:
@@ -67,17 +73,17 @@ def get_cached_ingredients(db: Session, ingredients: list[str]) -> dict[str, dic
     cached = {}
     if not ingredients:
         return cached
-    
-    cache_entries = db.query(IngredientCache).filter(
-        IngredientCache.original_text.in_(ingredients)
-    ).all()
-    
+
+    cache_entries = (
+        db.query(IngredientCache).filter(IngredientCache.original_text.in_(ingredients)).all()
+    )
+
     for entry in cache_entries:
         cached[entry.original_text] = {
             "canonical_name": entry.canonical_name,
-            "category": entry.category
+            "category": entry.category,
         }
-    
+
     return cached
 
 
@@ -87,29 +93,26 @@ def save_to_cache(db: Session, normalizations: list[dict]) -> None:
         original = item.get("original", "")
         if not original:
             continue
-        
-        existing = db.query(IngredientCache).filter(
-            IngredientCache.original_text == original
-        ).first()
-        
+
+        existing = (
+            db.query(IngredientCache).filter(IngredientCache.original_text == original).first()
+        )
+
         if not existing:
             cache_entry = IngredientCache(
                 original_text=original,
                 canonical_name=item.get("canonical_name", original.lower()),
-                category=item.get("category", "Other")
+                category=item.get("category", "Other"),
             )
             db.add(cache_entry)
-    
+
     db.commit()
 
 
-async def normalize_ingredients(
-    db: Session,
-    ingredients: list[str]
-) -> list[dict]:
+async def normalize_ingredients(db: Session, ingredients: list[str]) -> list[dict]:
     """
     Normalize ingredients using cache and LLM.
-    
+
     Returns list of dicts with:
     - original: original ingredient string
     - canonical_name: normalized name
@@ -117,38 +120,36 @@ async def normalize_ingredients(
     """
     if not ingredients:
         return []
-    
+
     unique_ingredients = list(set(ingredients))
-    
+
     cached = get_cached_ingredients(db, unique_ingredients)
-    
+
     uncached = [ing for ing in unique_ingredients if ing not in cached]
-    
+
     if uncached:
         llm_results = await normalize_with_llm(uncached)
         save_to_cache(db, llm_results)
-        
+
         for item in llm_results:
             original = item.get("original", "")
             if original:
                 cached[original] = {
                     "canonical_name": item.get("canonical_name", original.lower()),
-                    "category": item.get("category", "Other")
+                    "category": item.get("category", "Other"),
                 }
-    
+
     results = []
     for ing in ingredients:
         if ing in cached:
-            results.append({
-                "original": ing,
-                "canonical_name": cached[ing]["canonical_name"],
-                "category": cached[ing]["category"]
-            })
+            results.append(
+                {
+                    "original": ing,
+                    "canonical_name": cached[ing]["canonical_name"],
+                    "category": cached[ing]["category"],
+                }
+            )
         else:
-            results.append({
-                "original": ing,
-                "canonical_name": ing.lower(),
-                "category": "Other"
-            })
-    
+            results.append({"original": ing, "canonical_name": ing.lower(), "category": "Other"})
+
     return results

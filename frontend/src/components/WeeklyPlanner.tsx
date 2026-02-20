@@ -281,7 +281,9 @@ export function WeeklyPlanner({ onGenerateGroceryList, weeksToShow, onWeeksToSho
   const handleGenerateList = () => {
     const recipeIds = [...new Set(
       mealPlans
-        .filter((p) => p.recipe_id != null && selectedDates.has(p.date))
+        .filter((p): p is MealPlan & { recipe_id: number } =>
+          p.recipe_id != null && selectedDates.has(p.date)
+        )
         .map((p) => p.recipe_id)
     )];
     onGenerateGroceryList?.(recipeIds);

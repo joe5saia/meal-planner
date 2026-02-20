@@ -1,19 +1,20 @@
 """Tests for recipe scraping and ingredient parsing."""
-import pytest
-from unittest.mock import patch, AsyncMock
-from pathlib import Path
-import httpx
 
-from app.services.scraper import scrape_recipe, extract_json_ld
-from app.services.ingredient_parser import (
-    parse_ingredient,
-    aggregate_ingredients,
-    normalize_ingredient_name,
-    is_section_header,
-    singularize,
-)
+from pathlib import Path
+from unittest.mock import patch
+
+import httpx
+import pytest
 from bs4 import BeautifulSoup
 
+from app.services.ingredient_parser import (
+    aggregate_ingredients,
+    is_section_header,
+    normalize_ingredient_name,
+    parse_ingredient,
+    singularize,
+)
+from app.services.scraper import extract_json_ld, scrape_recipe
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
@@ -25,16 +26,23 @@ def load_fixture(name: str) -> str:
 
 class MockResponse:
     """Mock httpx Response."""
+
     def __init__(self, text: str, status_code: int = 200):
         self.text = text
         self.status_code = status_code
-    
-    def raise_for_status(self):
+
+    def raise_for_status(self) -> None:
         if self.status_code >= 400:
+            request = httpx.Request("GET", "https://example.com")
+            response = httpx.Response(
+                status_code=self.status_code,
+                request=request,
+                text=self.text,
+            )
             raise httpx.HTTPStatusError(
                 f"HTTP {self.status_code}",
-                request=None,
-                response=self,
+                request=request,
+                response=response,
             )
 
 
@@ -45,13 +53,15 @@ class TestRecipeScraping:
     async def test_scrape_ambitious_kitchen(self):
         """Test scraping an Ambitious Kitchen recipe."""
         fixture_html = load_fixture("ambitious_kitchen.html")
-        
+
         async def mock_get(self, url, **kwargs):
             return MockResponse(fixture_html)
-        
+
         with patch.object(httpx.AsyncClient, "get", mock_get):
-            result = await scrape_recipe("https://www.ambitiouskitchen.com/chicken-sausage-white-bean-bake/")
-        
+            result = await scrape_recipe(
+                "https://www.ambitiouskitchen.com/chicken-sausage-white-bean-bake/"
+            )
+
         assert result["title"] == "One Pan White Wine Chicken Sausage White Bean Bake"
         assert result["source_site"] == "ambitiouskitchen"
         assert len(result["ingredients"]) == 19
@@ -66,13 +76,13 @@ class TestRecipeScraping:
     async def test_scrape_smitten_kitchen(self):
         """Test scraping a Smitten Kitchen recipe."""
         fixture_html = load_fixture("smitten_kitchen.html")
-        
+
         async def mock_get(self, url, **kwargs):
             return MockResponse(fixture_html)
-        
+
         with patch.object(httpx.AsyncClient, "get", mock_get):
             result = await scrape_recipe("https://smittenkitchen.com/crispy-smashed-potatoes/")
-        
+
         assert result["title"] == "Crispy Smashed Potatoes"
         assert result["source_site"] == "smittenkitchen"
         assert len(result["ingredients"]) == 11
@@ -85,7 +95,7 @@ class TestRecipeScraping:
     async def test_scrape_nyt_returns_not_supported(self):
         """Test that NYT Cooking URLs return requires_manual_entry."""
         result = await scrape_recipe("https://cooking.nytimes.com/recipes/12345-test-recipe")
-        
+
         assert result["requires_manual_entry"] is True
         assert result["source_site"] == "nyt"
         assert "not currently supported" in result["error_message"].lower()
@@ -94,7 +104,7 @@ class TestRecipeScraping:
     @pytest.mark.asyncio
     async def test_scrape_generic_site_with_json_ld(self):
         """Test scraping a generic site with JSON-LD recipe data."""
-        html = '''
+        html = """
         <!DOCTYPE html>
         <html>
         <head>
@@ -113,14 +123,14 @@ class TestRecipeScraping:
         </head>
         <body><h1>Generic Test Recipe</h1></body>
         </html>
-        '''
-        
+        """
+
         async def mock_get(self, url, **kwargs):
             return MockResponse(html)
-        
+
         with patch.object(httpx.AsyncClient, "get", mock_get):
             result = await scrape_recipe("https://www.example.com/recipe")
-        
+
         assert result["title"] == "Generic Test Recipe"
         assert result["source_site"] == "unknown"
         assert len(result["ingredients"]) == 3
@@ -130,7 +140,7 @@ class TestRecipeScraping:
     @pytest.mark.asyncio
     async def test_scrape_fallback_without_json_ld(self):
         """Test fallback parsing when no JSON-LD is present."""
-        html = '''
+        html = """
         <!DOCTYPE html>
         <html>
         <head>
@@ -140,14 +150,14 @@ class TestRecipeScraping:
         </head>
         <body><h1>Simple Recipe</h1></body>
         </html>
-        '''
-        
+        """
+
         async def mock_get(self, url, **kwargs):
             return MockResponse(html)
-        
+
         with patch.object(httpx.AsyncClient, "get", mock_get):
             result = await scrape_recipe("https://www.example.com/simple-recipe")
-        
+
         assert result["title"] == "Simple Recipe"
         assert result["requires_manual_entry"] is True
         assert result["ingredients"] == []
@@ -158,7 +168,7 @@ class TestJsonLdExtraction:
 
     def test_extract_json_ld_simple(self):
         """Test extracting a simple JSON-LD recipe."""
-        html = '''
+        html = """
         <html>
         <head>
             <script type="application/ld+json">
@@ -166,17 +176,17 @@ class TestJsonLdExtraction:
             </script>
         </head>
         </html>
-        '''
+        """
         soup = BeautifulSoup(html, "lxml")
         result = extract_json_ld(soup)
-        
+
         assert result is not None
         assert result["name"] == "Test Recipe"
         assert result["recipeIngredient"] == ["flour", "sugar"]
 
     def test_extract_json_ld_from_graph(self):
         """Test extracting recipe from @graph structure."""
-        html = '''
+        html = """
         <html>
         <head>
             <script type="application/ld+json">
@@ -190,19 +200,19 @@ class TestJsonLdExtraction:
             </script>
         </head>
         </html>
-        '''
+        """
         soup = BeautifulSoup(html, "lxml")
         result = extract_json_ld(soup)
-        
+
         assert result is not None
         assert result["name"] == "Graph Recipe"
 
     def test_extract_json_ld_returns_none_when_missing(self):
         """Test that None is returned when no JSON-LD is present."""
-        html = '<html><head></head><body></body></html>'
+        html = "<html><head></head><body></body></html>"
         soup = BeautifulSoup(html, "lxml")
         result = extract_json_ld(soup)
-        
+
         assert result is None
 
 
@@ -212,7 +222,7 @@ class TestIngredientParser:
     def test_parse_simple_ingredient(self):
         """Test parsing a simple ingredient string."""
         result = parse_ingredient("2 cups flour")
-        
+
         assert result["quantity"] == 2.0
         assert result["unit"] == "cup"
         assert result["name"] == "flour"
@@ -220,7 +230,7 @@ class TestIngredientParser:
     def test_parse_ingredient_with_tablespoon(self):
         """Test parsing with tablespoon abbreviation."""
         result = parse_ingredient("3 tbsp olive oil")
-        
+
         assert result["quantity"] == 3.0
         assert result["unit"] == "tablespoon"
         assert result["name"] == "olive oil"
@@ -228,7 +238,7 @@ class TestIngredientParser:
     def test_parse_ingredient_with_fraction(self):
         """Test parsing with unicode fraction."""
         result = parse_ingredient("½ teaspoon salt")
-        
+
         assert result["quantity"] == 0.5
         assert result["unit"] == "teaspoon"
         assert result["name"] == "salt"
@@ -236,7 +246,7 @@ class TestIngredientParser:
     def test_parse_ingredient_with_range(self):
         """Test parsing ingredient with quantity range (takes average)."""
         result = parse_ingredient("2-3 cloves garlic")
-        
+
         assert result["quantity"] == 2.5  # Average of 2 and 3
         assert result["unit"] == "clove"
         assert result["name"] == "garlic"
@@ -244,14 +254,14 @@ class TestIngredientParser:
     def test_parse_ingredient_no_quantity(self):
         """Test parsing ingredient without quantity."""
         result = parse_ingredient("salt to taste")
-        
+
         assert result["quantity"] is None
         assert result["name"] == "salt to taste"
 
     def test_parse_ingredient_with_parenthetical(self):
         """Test that parenthetical notes are removed."""
         result = parse_ingredient("1 cup chicken broth (or vegetable broth)")
-        
+
         assert result["quantity"] == 1.0
         assert result["unit"] == "cup"
         assert "broth" in result["name"].lower()
@@ -266,9 +276,9 @@ class TestIngredientAggregation:
             "2 cloves garlic",
             "3 cloves garlic",
         ]
-        
+
         result = aggregate_ingredients(ingredients)
-        
+
         garlic = next(item for item in result if "garlic" in item["name"].lower())
         assert garlic["quantity"] == "5"
         assert garlic["unit"] == "clove"
@@ -280,9 +290,9 @@ class TestIngredientAggregation:
             "1 cup flour",
             "2 cups sugar",
         ]
-        
+
         result = aggregate_ingredients(ingredients)
-        
+
         assert len(result) == 2
         flour = next(item for item in result if "flour" in item["name"].lower())
         sugar = next(item for item in result if "sugar" in item["name"].lower())
@@ -295,9 +305,9 @@ class TestIngredientAggregation:
             "2 tablespoons olive oil",
             "1 tablespoon olive oil, for drizzling",
         ]
-        
+
         result = aggregate_ingredients(ingredients)
-        
+
         oil = next(item for item in result if "olive oil" in item["name"].lower())
         assert len(oil["original_strings"]) == 2
         assert "2 tablespoons olive oil" in oil["original_strings"]
@@ -309,10 +319,10 @@ class TestIngredientAggregation:
             "2 cups apple",
             "1 cup banana",
         ]
-        
+
         result = aggregate_ingredients(ingredients)
         names = [item["name"].lower() for item in result]
-        
+
         assert names == sorted(names)
 
 
@@ -338,11 +348,15 @@ class TestNormalizeIngredientName:
 
     def test_normalize_sorts_words(self):
         """Test that word order is normalized (sorted)."""
-        assert normalize_ingredient_name("garlic clove") == normalize_ingredient_name("clove garlic")
+        assert normalize_ingredient_name("garlic clove") == normalize_ingredient_name(
+            "clove garlic"
+        )
 
     def test_normalize_descriptors_and_plurals(self):
         """Test combined descriptor removal and plural normalization."""
-        assert normalize_ingredient_name("diced green onions") == normalize_ingredient_name("chopped green onion")
+        assert normalize_ingredient_name("diced green onions") == normalize_ingredient_name(
+            "chopped green onion"
+        )
 
 
 class TestSectionHeaderDetection:
@@ -421,10 +435,10 @@ class TestAggregationWithImprovedMatching:
             "2 cloves garlic",
             "1 clove garlic",
         ]
-        
+
         result = aggregate_ingredients(ingredients)
         garlic_items = [item for item in result if "garlic" in item["name"].lower()]
-        
+
         assert len(garlic_items) == 1
         assert garlic_items[0]["quantity"] == "3"
 
@@ -434,10 +448,10 @@ class TestAggregationWithImprovedMatching:
             "1 cup diced onion",
             "1 cup chopped onions",
         ]
-        
+
         result = aggregate_ingredients(ingredients)
         onion_items = [item for item in result if "onion" in item["name"].lower()]
-        
+
         assert len(onion_items) == 1
         assert onion_items[0]["quantity"] == "2"
 
@@ -447,10 +461,10 @@ class TestAggregationWithImprovedMatching:
             "1 cup diced tomatoes",
             "1 cup chopped tomatoes",
         ]
-        
+
         result = aggregate_ingredients(ingredients)
         tomato_items = [item for item in result if "tomato" in item["name"].lower()]
-        
+
         assert len(tomato_items) == 1
         assert tomato_items[0]["quantity"] == "2"
 
@@ -463,9 +477,9 @@ class TestAggregationWithImprovedMatching:
             "For the filling:",
             "1 cup ricotta cheese",
         ]
-        
+
         result = aggregate_ingredients(ingredients)
-        
+
         names = [item["name"].lower() for item in result]
         assert not any("for the" in name for name in names)
         assert not any(name.endswith(":") for name in names)
@@ -478,7 +492,7 @@ class TestUnitExtractionFromAnywhere:
     def test_unit_at_beginning(self):
         """Test unit extraction when unit is first word after quantity."""
         result = parse_ingredient("2 cloves garlic")
-        
+
         assert result["quantity"] == 2.0
         assert result["unit"] == "clove"
         assert result["name"] == "garlic"
@@ -486,7 +500,7 @@ class TestUnitExtractionFromAnywhere:
     def test_unit_at_end(self):
         """Test unit extraction when unit is last word."""
         result = parse_ingredient("1 garlic clove")
-        
+
         assert result["quantity"] == 1.0
         assert result["unit"] == "clove"
         assert result["name"] == "garlic"
@@ -494,7 +508,7 @@ class TestUnitExtractionFromAnywhere:
     def test_unit_in_middle(self):
         """Test unit extraction when unit is in the middle."""
         result = parse_ingredient("2 minced cloves garlic")
-        
+
         assert result["quantity"] == 2.0
         assert result["unit"] == "clove"
         assert "garlic" in result["name"]
@@ -505,10 +519,10 @@ class TestUnitExtractionFromAnywhere:
             "2 cloves garlic",
             "1 garlic clove",
         ]
-        
+
         result = aggregate_ingredients(ingredients)
         garlic_items = [item for item in result if "garlic" in item["name"].lower()]
-        
+
         assert len(garlic_items) == 1
         assert garlic_items[0]["quantity"] == "3"
         assert garlic_items[0]["unit"] == "clove"
@@ -516,7 +530,7 @@ class TestUnitExtractionFromAnywhere:
     def test_multiple_unit_candidates(self):
         """Test that only first matching unit is extracted."""
         result = parse_ingredient("1 can diced tomatoes")
-        
+
         assert result["unit"] == "can"
         assert "tomatoes" in result["name"]
 
@@ -524,7 +538,7 @@ class TestUnitExtractionFromAnywhere:
         """Test bunch unit extraction from different positions."""
         result1 = parse_ingredient("1 bunch green onions")
         result2 = parse_ingredient("1 green onion bunch")
-        
+
         assert result1["unit"] == "bunch"
         assert result2["unit"] == "bunch"
         assert "green" in result1["name"] or "onion" in result1["name"]

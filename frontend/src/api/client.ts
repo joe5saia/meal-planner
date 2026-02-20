@@ -7,7 +7,8 @@ import type {
   GroceryList,
 } from './types';
 
-const API_BASE = '/api';
+const BASE_URL = import.meta.env.BASE_URL.replace(/\/$/, '');
+const API_BASE = `${BASE_URL}/api`;
 
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, {

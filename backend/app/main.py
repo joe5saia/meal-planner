@@ -1,9 +1,11 @@
+from contextlib import asynccontextmanager
+from typing import Any, cast
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
 
 from .database import init_db
-from .routers import recipes, meal_plans, grocery
+from .routers import grocery, meal_plans, recipes
 
 
 @asynccontextmanager
@@ -22,7 +24,7 @@ app = FastAPI(
 
 # CORS middleware for frontend
 app.add_middleware(
-    CORSMiddleware,
+    cast(Any, CORSMiddleware),
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
     allow_credentials=True,
     allow_methods=["*"],

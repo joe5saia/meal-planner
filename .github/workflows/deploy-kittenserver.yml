@@ -1,0 +1,104 @@
+name: Deploy to kittenserver
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-kittenserver
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ vars.DEPLOY_USER || 'saiaj' }}
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/home/saiaj/apps/meal-planner' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate deploy config
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DEPLOY_HOST}" ]; then
+            echo "::error::Missing repository variable DEPLOY_HOST"
+            exit 1
+          fi
+          if [ -z "${DEPLOY_SSH_KEY}" ]; then
+            echo "::error::Missing repository secret DEPLOY_SSH_KEY"
+            exit 1
+          fi
+
+      - name: Connect to Tailscale (optional)
+        if: ${{ secrets.TS_AUTHKEY != '' }}
+        uses: tailscale/github-action@v3
+        with:
+          authkey: ${{ secrets.TS_AUTHKEY }}
+
+      - name: Configure SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf "%s" "${DEPLOY_SSH_KEY}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          if [ -n "${DEPLOY_SSH_KNOWN_HOSTS}" ]; then
+            printf "%s\n" "${DEPLOY_SSH_KNOWN_HOSTS}" > ~/.ssh/known_hosts
+          else
+            ssh-keyscan -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts
+          fi
+
+      - name: Sync files to server
+        run: |
+          set -euo pipefail
+          rsync -az --delete \
+            --exclude '.git' \
+            --exclude '.github' \
+            --exclude '.env' \
+            --exclude '.venv' \
+            --exclude '.venv-smoke' \
+            --exclude 'backend/.venv' \
+            --exclude 'frontend/node_modules' \
+            --exclude 'test_screenshots' \
+            ./ "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/"
+
+      - name: Deploy containers
+        run: |
+          set -euo pipefail
+          ssh "${DEPLOY_USER}@${DEPLOY_HOST}" <<EOF
+          set -euo pipefail
+          cd "${DEPLOY_PATH}"
+          if [ ! -f .env ]; then
+            cp .env.example .env
+          fi
+          docker compose up -d --build
+          docker compose ps
+          EOF
+
+      - name: Verify deployment
+        run: |
+          set -euo pipefail
+          ssh "${DEPLOY_USER}@${DEPLOY_HOST}" <<EOF
+          set -euo pipefail
+          cd "${DEPLOY_PATH}"
+          APP_HOST=\$(grep -E '^APP_HOST=' .env | cut -d= -f2- || true)
+          APP_PATH_PREFIX=\$(grep -E '^APP_PATH_PREFIX=' .env | cut -d= -f2- || true)
+          APP_HOST=\${APP_HOST:-meal.local}
+          APP_PATH_PREFIX=\${APP_PATH_PREFIX:-/meals}
+          BASE_PATH=\${APP_PATH_PREFIX%/}
+          if [ "\${BASE_PATH}" = "/" ]; then
+            BASE_PATH=""
+          fi
+          curl -fsS -H "Host: \${APP_HOST}" "http://127.0.0.1\${BASE_PATH}/" >/dev/null
+          curl -fsS -H "Host: \${APP_HOST}" "http://127.0.0.1\${BASE_PATH}/api/recipes" >/dev/null
+          echo "Deployment check passed: Host=\${APP_HOST}, BasePath=\${BASE_PATH:-/}"
+          EOF

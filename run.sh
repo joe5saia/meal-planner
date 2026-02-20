@@ -21,17 +21,20 @@ log() {
 setup_backend() {
     log "Setting up backend..."
     cd "$BACKEND_DIR"
-    
-    if [ ! -d "venv" ]; then
-        log "Creating Python virtual environment..."
-        python3 -m venv venv
+
+    if ! command -v uv >/dev/null 2>&1; then
+        echo "Error: uv is required for backend setup. Install from https://docs.astral.sh/uv/"
+        exit 1
     fi
-    
-    source venv/bin/activate
-    
-    log "Installing Python dependencies..."
-    pip install -q -r requirements.txt
-    
+
+    if [ ! -d ".venv" ]; then
+        log "Creating Python virtual environment with uv..."
+        uv venv
+    fi
+
+    log "Installing backend dependencies with uv..."
+    uv sync --group dev
+
     log "Backend setup complete!"
 }
 
@@ -49,9 +52,8 @@ setup_frontend() {
 
 start_backend() {
     cd "$BACKEND_DIR"
-    source venv/bin/activate
     log "Starting backend on http://localhost:8000"
-    uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+    uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 }
 
 start_frontend() {
@@ -74,7 +76,7 @@ case "${1:-start}" in
         ;;
     start|"")
         # Check if setup is needed
-        if [ ! -d "$BACKEND_DIR/venv" ] || [ ! -d "$FRONTEND_DIR/node_modules" ]; then
+        if [ ! -d "$BACKEND_DIR/.venv" ] || [ ! -d "$FRONTEND_DIR/node_modules" ]; then
             log "First run detected. Running setup..."
             setup_backend
             setup_frontend
@@ -91,8 +93,7 @@ case "${1:-start}" in
         
         # Start both servers
         cd "$BACKEND_DIR"
-        source venv/bin/activate
-        uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 &
+        uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 &
         BACKEND_PID=$!
         
         cd "$FRONTEND_DIR"

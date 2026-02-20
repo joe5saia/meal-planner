@@ -1,13 +1,13 @@
-import httpx
-from bs4 import BeautifulSoup
+import html
 import json
 import re
-import html
-from typing import Optional
 from urllib.parse import urlparse
 
+import httpx
+from bs4 import BeautifulSoup
 
-def decode_html_entities(text: Optional[str]) -> Optional[str]:
+
+def decode_html_entities(text: str | None) -> str | None:
     """Decode HTML entities like &amp; to & in text."""
     if text is None:
         return None
@@ -21,7 +21,7 @@ async def scrape_recipe(url: str) -> dict:
     """
     parsed = urlparse(url)
     domain = parsed.netloc.lower()
-    
+
     if "cooking.nytimes.com" in domain:
         return {
             "url": url,
@@ -36,14 +36,16 @@ async def scrape_recipe(url: str) -> dict:
             "servings": None,
             "source_site": "nyt",
             "requires_manual_entry": True,
-            "error_message": "NYT Cooking requires authentication and is not currently supported. Please copy ingredients manually.",
+            "error_message": (
+                "NYT Cooking requires authentication and is not currently supported. "
+                "Please copy ingredients manually."
+            ),
         }
-    elif "ambitiouskitchen.com" in domain:
+    if "ambitiouskitchen.com" in domain:
         return await scrape_generic_recipe(url, "ambitiouskitchen")
-    elif "smittenkitchen.com" in domain:
+    if "smittenkitchen.com" in domain:
         return await scrape_generic_recipe(url, "smittenkitchen")
-    else:
-        return await scrape_generic_recipe(url, "unknown")
+    return await scrape_generic_recipe(url, "unknown")
 
 
 async def scrape_generic_recipe(url: str, source_site: str) -> dict:
@@ -51,41 +53,45 @@ async def scrape_generic_recipe(url: str, source_site: str) -> dict:
     Generic recipe scraper that looks for JSON-LD structured data.
     Falls back to HTML parsing if needed.
     """
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
-    }
-    
+    headers = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"}
+
     async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
         response = await client.get(url, headers=headers)
         response.raise_for_status()
-    
+
     soup = BeautifulSoup(response.text, "lxml")
-    
+
     recipe_data = extract_json_ld(soup)
-    
+
     if recipe_data:
         return format_recipe_data(recipe_data, url, source_site)
-    
+
     return fallback_html_parse(soup, url, source_site)
 
 
-def extract_json_ld(soup: BeautifulSoup) -> Optional[dict]:
+def extract_json_ld(soup: BeautifulSoup) -> dict | None:
     """Extract Recipe schema from JSON-LD scripts."""
     scripts = soup.find_all("script", type="application/ld+json")
-    
+
     for script in scripts:
+        script_content = script.string
+        if script_content is None:
+            continue
+
         try:
-            data = json.loads(script.string)
+            data = json.loads(script_content)
             recipe = find_recipe_in_json(data)
             if recipe:
                 return recipe
-        except (json.JSONDecodeError, TypeError):
+        except json.JSONDecodeError:
             continue
-    
+        except TypeError:
+            continue
+
     return None
 
 
-def find_recipe_in_json(data) -> Optional[dict]:
+def find_recipe_in_json(data) -> dict | None:
     """Recursively search for Recipe type in JSON-LD."""
     if isinstance(data, dict):
         if data.get("@type") == "Recipe":
@@ -110,12 +116,12 @@ def format_recipe_data(data: dict, url: str, source_site: str) -> dict:
     ingredients = data.get("recipeIngredient", [])
     if not isinstance(ingredients, list):
         ingredients = [ingredients]
-    
+
     decoded_ingredients = [decode_html_entities(ing) for ing in ingredients]
-    
+
     instructions = extract_instructions(data.get("recipeInstructions", []))
     decoded_instructions = [decode_html_entities(inst) for inst in instructions]
-    
+
     return {
         "url": url,
         "title": decode_html_entities(data.get("name", "Untitled Recipe")),
@@ -136,10 +142,10 @@ def extract_instructions(instructions) -> list[str]:
     """Extract instruction steps from various formats."""
     if not instructions:
         return []
-    
+
     if isinstance(instructions, str):
         return [instructions]
-    
+
     if isinstance(instructions, list):
         result = []
         for item in instructions:
@@ -154,11 +160,11 @@ def extract_instructions(instructions) -> list[str]:
                         if isinstance(step, dict):
                             result.append(step.get("text", ""))
         return [s for s in result if s]
-    
+
     return []
 
 
-def extract_image(image_data) -> Optional[str]:
+def extract_image(image_data) -> str | None:
     """Extract image URL from various formats."""
     if not image_data:
         return None
@@ -171,15 +177,15 @@ def extract_image(image_data) -> Optional[str]:
     return None
 
 
-def format_duration(duration: Optional[str]) -> Optional[str]:
+def format_duration(duration: str | None) -> str | None:
     """Convert ISO 8601 duration to human-readable format."""
     if not duration:
         return None
-    
+
     match = re.match(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", duration)
     if not match:
         return duration
-    
+
     hours, minutes, seconds = match.groups()
     parts = []
     if hours:
@@ -188,11 +194,11 @@ def format_duration(duration: Optional[str]) -> Optional[str]:
         parts.append(f"{minutes} min")
     if seconds:
         parts.append(f"{seconds} sec")
-    
+
     return " ".join(parts) if parts else None
 
 
-def extract_servings(yield_data) -> Optional[str]:
+def extract_servings(yield_data) -> str | None:
     """Extract servings from recipeYield."""
     if not yield_data:
         return None
@@ -210,13 +216,15 @@ def fallback_html_parse(soup: BeautifulSoup, url: str, source_site: str) -> dict
     """
     title = soup.find("h1")
     title_text = title.get_text(strip=True) if title else "Untitled Recipe"
-    
+
     og_image = soup.find("meta", property="og:image")
-    image_url = og_image.get("content") if og_image else None
-    
+    image_content = og_image.get("content") if og_image else None
+    image_url = image_content if isinstance(image_content, str) else None
+
     og_description = soup.find("meta", property="og:description")
-    description = og_description.get("content") if og_description else None
-    
+    description_content = og_description.get("content") if og_description else None
+    description = description_content if isinstance(description_content, str) else None
+
     return {
         "url": url,
         "title": decode_html_entities(title_text),
@@ -230,5 +238,7 @@ def fallback_html_parse(soup: BeautifulSoup, url: str, source_site: str) -> dict
         "servings": None,
         "source_site": source_site,
         "requires_manual_entry": True,
-        "error_message": "Could not extract recipe data automatically. Please enter ingredients manually.",
+        "error_message": (
+            "Could not extract recipe data automatically. Please enter ingredients manually."
+        ),
     }
