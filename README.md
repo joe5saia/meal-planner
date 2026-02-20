@@ -146,10 +146,8 @@ This repo includes `.github/workflows/deploy-kittenserver.yml` to deploy over SS
 
 Required repository variables:
 - `DEPLOY_HOST` (example: `kittenserver` or `kittenserver-1.taild4e01a.ts.net`)
-
-Optional repository variables:
-- `DEPLOY_USER` (default: `saiaj`)
-- `DEPLOY_PATH` (default: `/home/saiaj/apps/meal-planner`)
+- `DEPLOY_USER`
+- `DEPLOY_PATH`
 
 Required repository secrets:
 - `DEPLOY_SSH_KEY` (private key for SSH auth)
