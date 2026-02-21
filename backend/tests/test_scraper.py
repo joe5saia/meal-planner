@@ -92,6 +92,61 @@ class TestRecipeScraping:
         assert result["requires_manual_entry"] is False
 
     @pytest.mark.asyncio
+    async def test_scrape_smitten_kitchen_jetpack_microdata(self):
+        """Test scraping legacy Smitten Kitchen Jetpack microdata recipe markup."""
+        html = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta property="og:image" content="https://example.com/pancakes.jpg">
+            <meta property="og:description" content="Fluffy buttermilk pancakes.">
+        </head>
+        <body>
+            <div class="hrecipe h-recipe jetpack-recipe" itemscope itemtype="http://schema.org/Recipe">
+                <h3 class="p-name jetpack-recipe-title fn" itemprop="name">Tall Fluffy Buttermilk Pancakes</h3>
+                <ul class="jetpack-recipe-meta">
+                    <li itemprop="recipeYield">Servings: Makes 14 small pancakes</li>
+                    <li><time datetime="P0DT0H15M0S" itemprop="totalTime">Time: 15 minutes</time></li>
+                </ul>
+                <div class="jetpack-recipe-content">
+                    <div class="jetpack-recipe-ingredients">
+                        <ul>
+                            <li itemprop="recipeIngredient">2 tablespoons butter</li>
+                            <li itemprop="recipeIngredient">1 cup flour</li>
+                        </ul>
+                    </div>
+                    <div class="jetpack-recipe-directions e-instructions">
+                        <p>Whisk wet ingredients.</p>
+                        <p>Fold in dry ingredients and cook.</p>
+                    </div>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+        async def mock_get(self, url, **kwargs):
+            return MockResponse(html)
+
+        with patch.object(httpx.AsyncClient, "get", mock_get):
+            result = await scrape_recipe(
+                "https://smittenkitchen.com/2017/05/tall-fluffy-buttermilk-pancakes/"
+            )
+
+        assert result["title"] == "Tall Fluffy Buttermilk Pancakes"
+        assert result["description"] == "Fluffy buttermilk pancakes."
+        assert result["image_url"] == "https://example.com/pancakes.jpg"
+        assert result["source_site"] == "smittenkitchen"
+        assert result["ingredients"] == ["2 tablespoons butter", "1 cup flour"]
+        assert result["instructions"] == [
+            "Whisk wet ingredients.",
+            "Fold in dry ingredients and cook.",
+        ]
+        assert result["total_time"] == "15 min"
+        assert result["servings"] == "Servings: Makes 14 small pancakes"
+        assert result["requires_manual_entry"] is False
+
+    @pytest.mark.asyncio
     async def test_scrape_nyt_returns_not_supported(self):
         """Test that NYT Cooking URLs return requires_manual_entry."""
         result = await scrape_recipe("https://cooking.nytimes.com/recipes/12345-test-recipe")
