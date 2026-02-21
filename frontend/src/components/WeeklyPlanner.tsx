@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
 import type { MealPlan, Recipe } from '../api/types';
 import { decodeHtmlEntities } from '../utils/text';
@@ -14,6 +14,14 @@ const MEAL_TYPE_COLORS: Record<MealType, { bg: string; text: string; border: str
   other: { bg: 'bg-stone-100', text: 'text-stone-700', border: 'border-stone-300' },
 };
 
+const DAY_NAMES = ['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri'] as const;
+const MAX_EMPTY_QUERY_RECIPES = 20;
+const MAX_QUERY_RECIPES = 40;
+
+function formatDateString(date: Date): string {
+  return date.toISOString().split('T')[0];
+}
+
 interface RecipeComboboxProps {
   recipes: Recipe[];
   onSelectRecipe: (recipeId: number, mealType: MealType) => void;
@@ -27,9 +35,20 @@ function RecipeCombobox({ recipes, onSelectRecipe, onAddPlaceholder }: RecipeCom
   const [showMealTypeMenu, setShowMealTypeMenu] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const filtered = recipes.filter(r =>
-    r.title.toLowerCase().includes(query.toLowerCase())
-  );
+  const normalizedQuery = query.trim().toLowerCase();
+  const visibleRecipes = useMemo(() => {
+    if (!isOpen) {
+      return [];
+    }
+
+    if (!normalizedQuery) {
+      return recipes.slice(0, MAX_EMPTY_QUERY_RECIPES);
+    }
+
+    return recipes
+      .filter((recipe) => recipe.title.toLowerCase().includes(normalizedQuery))
+      .slice(0, MAX_QUERY_RECIPES);
+  }, [isOpen, normalizedQuery, recipes]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -57,9 +76,9 @@ function RecipeCombobox({ recipes, onSelectRecipe, onAddPlaceholder }: RecipeCom
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && query.trim()) {
-      if (filtered.length > 0) {
-        handleSelect(filtered[0].id);
+    if (e.key === 'Enter' && normalizedQuery) {
+      if (visibleRecipes.length > 0) {
+        handleSelect(visibleRecipes[0].id);
       } else {
         handleAddAsPlaceholder();
       }
@@ -114,19 +133,19 @@ function RecipeCombobox({ recipes, onSelectRecipe, onAddPlaceholder }: RecipeCom
           className="flex-1 text-xs border border-[#D8DCD0] rounded-r p-1 min-w-0"
         />
       </div>
-      {isOpen && (query || recipes.length > 0) && (
+      {isOpen && (normalizedQuery || recipes.length > 0) && (
         <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#D8DCD0] rounded shadow-lg z-10 max-h-48 overflow-y-auto">
-          {filtered.length > 0 ? (
-            filtered.map(r => (
+          {visibleRecipes.length > 0 ? (
+            visibleRecipes.map((recipe) => (
               <button
-                key={r.id}
-                onClick={() => handleSelect(r.id)}
+                key={recipe.id}
+                onClick={() => handleSelect(recipe.id)}
                 className="block w-full text-left text-xs px-2 py-1.5 hover:bg-[#F0F0E8] truncate"
               >
-                {r.title}
+                {recipe.title}
               </button>
             ))
-          ) : query.trim() ? (
+          ) : normalizedQuery ? (
             <button
               onClick={handleAddAsPlaceholder}
               className="block w-full text-left text-xs px-2 py-1.5 hover:bg-[#F0F0E8] italic text-[#6B7B6B]"
@@ -164,45 +183,77 @@ export function WeeklyPlanner({ onGenerateGroceryList, weeksToShow, onWeeksToSho
     return start;
   });
 
-  const totalDays = 7 * weeksToShow;
-  const allDays = Array.from({ length: totalDays }, (_, i) => {
-    const date = new Date(weekStart);
-    date.setDate(date.getDate() + i);
-    return date;
-  });
+  const allDays = useMemo(() => {
+    const totalDays = 7 * weeksToShow;
+    return Array.from({ length: totalDays }, (_, i) => {
+      const date = new Date(weekStart);
+      date.setDate(date.getDate() + i);
+      return date;
+    });
+  }, [weekStart, weeksToShow]);
 
-  const formatDate = (date: Date) => date.toISOString().split('T')[0];
+  const todayDate = useMemo(() => formatDateString(new Date()), []);
+  const allDayKeys = useMemo(() => allDays.map((day) => formatDateString(day)), [allDays]);
+  const mealPlansByDate = useMemo(() => {
+    const groupedPlans = new Map<string, MealPlan[]>();
 
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const startDate = formatDate(allDays[0]);
-      const endDate = formatDate(allDays[allDays.length - 1]);
-      const [plans, recipeList] = await Promise.all([
-        api.mealPlans.list(startDate, endDate),
-        api.recipes.getBox(),
-      ]);
-      setMealPlans(plans);
-      setRecipes(recipeList);
-    } catch (err) {
-      console.error('Failed to load meal plans:', err);
-    } finally {
-      setLoading(false);
+    for (const mealPlan of mealPlans) {
+      const plansForDate = groupedPlans.get(mealPlan.date);
+      if (plansForDate) {
+        plansForDate.push(mealPlan);
+      } else {
+        groupedPlans.set(mealPlan.date, [mealPlan]);
+      }
     }
-  };
+
+    return groupedPlans;
+  }, [mealPlans]);
 
   useEffect(() => {
-    fetchData();
-  }, [weekStart, weeksToShow]);
+    let isCancelled = false;
+
+    async function fetchData(): Promise<void> {
+      setLoading(true);
+      try {
+        const startDate = formatDateString(allDays[0]);
+        const endDate = formatDateString(allDays[allDays.length - 1]);
+        const [plans, recipeList] = await Promise.all([
+          api.mealPlans.list(startDate, endDate),
+          api.recipes.getBox(),
+        ]);
+
+        if (isCancelled) {
+          return;
+        }
+
+        setMealPlans(plans);
+        setRecipes(recipeList);
+      } catch (err) {
+        if (!isCancelled) {
+          console.error('Failed to load meal plans:', err);
+        }
+      } finally {
+        if (!isCancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    void fetchData();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [allDays]);
 
   const handleAddMeal = async (date: Date, recipeId: number, mealType: MealType) => {
     try {
       const plan = await api.mealPlans.create({
         recipe_id: recipeId,
-        date: formatDate(date),
+        date: formatDateString(date),
         meal_type: mealType,
       });
-      setMealPlans([...mealPlans, plan]);
+      setMealPlans((currentPlans) => [...currentPlans, plan]);
     } catch (err) {
       console.error('Failed to add meal:', err);
     }
@@ -212,10 +263,10 @@ export function WeeklyPlanner({ onGenerateGroceryList, weeksToShow, onWeeksToSho
     try {
       const plan = await api.mealPlans.create({
         placeholder_text: text,
-        date: formatDate(date),
+        date: formatDateString(date),
         meal_type: mealType,
       });
-      setMealPlans([...mealPlans, plan]);
+      setMealPlans((currentPlans) => [...currentPlans, plan]);
     } catch (err) {
       console.error('Failed to add placeholder:', err);
     }
@@ -224,9 +275,11 @@ export function WeeklyPlanner({ onGenerateGroceryList, weeksToShow, onWeeksToSho
   const handleUpdateMealType = async (planId: number, newMealType: MealType) => {
     try {
       await api.mealPlans.update(planId, { meal_type: newMealType });
-      setMealPlans(mealPlans.map(p => 
-        p.id === planId ? { ...p, meal_type: newMealType } : p
-      ));
+      setMealPlans((currentPlans) =>
+        currentPlans.map((mealPlan) =>
+          mealPlan.id === planId ? { ...mealPlan, meal_type: newMealType } : mealPlan
+        )
+      );
     } catch (err) {
       console.error('Failed to update meal type:', err);
     }
@@ -235,7 +288,7 @@ export function WeeklyPlanner({ onGenerateGroceryList, weeksToShow, onWeeksToSho
   const handleRemoveMeal = async (planId: number) => {
     try {
       await api.mealPlans.delete(planId);
-      setMealPlans(mealPlans.filter((p) => p.id !== planId));
+      setMealPlans((currentPlans) => currentPlans.filter((mealPlan) => mealPlan.id !== planId));
     } catch (err) {
       console.error('Failed to remove meal:', err);
     }
@@ -254,7 +307,7 @@ export function WeeklyPlanner({ onGenerateGroceryList, weeksToShow, onWeeksToSho
   };
 
   const toggleDateSelection = (date: Date) => {
-    const dateStr = formatDate(date);
+    const dateStr = formatDateString(date);
     setSelectedDates(prev => {
       const newSet = new Set(prev);
       if (newSet.has(dateStr)) {
@@ -267,16 +320,17 @@ export function WeeklyPlanner({ onGenerateGroceryList, weeksToShow, onWeeksToSho
   };
 
   const selectAllDates = () => {
-    setSelectedDates(new Set(allDays.map(d => formatDate(d))));
+    setSelectedDates(new Set(allDayKeys));
   };
 
   const deselectAllDates = () => {
     setSelectedDates(new Set());
   };
 
-  const selectedMealsCount = mealPlans.filter(
-    p => p.recipe_id != null && selectedDates.has(p.date)
-  ).length;
+  const selectedMealsCount = useMemo(
+    () => mealPlans.filter((mealPlan) => mealPlan.recipe_id != null && selectedDates.has(mealPlan.date)).length,
+    [mealPlans, selectedDates]
+  );
 
   const handleGenerateList = () => {
     const recipeIds = [...new Set(
@@ -288,11 +342,6 @@ export function WeeklyPlanner({ onGenerateGroceryList, weeksToShow, onWeeksToSho
     )];
     onGenerateGroceryList?.(recipeIds);
   };
-
-  const getMealsForDate = (date: Date) =>
-    mealPlans.filter((p) => p.date === formatDate(date));
-
-  const dayNames = ['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
 
   return (
     <div className="bg-[#FAFAF7] rounded-lg shadow p-6">
@@ -341,14 +390,15 @@ export function WeeklyPlanner({ onGenerateGroceryList, weeksToShow, onWeeksToSho
         <>
           <div className="grid grid-cols-7 gap-2 mb-4">
             {allDays.map((date, i) => {
-              const meals = getMealsForDate(date);
-              const isToday = formatDate(date) === formatDate(new Date());
-              const isSelected = selectedDates.has(formatDate(date));
+              const dateKey = formatDateString(date);
+              const meals = mealPlansByDate.get(dateKey) ?? [];
+              const isToday = dateKey === todayDate;
+              const isSelected = selectedDates.has(dateKey);
               const dayIndex = i % 7;
 
               return (
                 <div
-                  key={i}
+                  key={dateKey}
                   className={`border rounded-lg p-2 min-h-44 ${
                     isSelected 
                       ? 'bg-[#D4E4D4] border-[#6B8E6B]' 
@@ -359,7 +409,7 @@ export function WeeklyPlanner({ onGenerateGroceryList, weeksToShow, onWeeksToSho
                 >
                   <div className="flex items-center justify-between mb-2">
                     <div className={`text-sm font-medium ${isSelected ? 'text-[#2D3B2D]' : 'text-[#6B7B6B]'}`}>
-                      {dayNames[dayIndex]}
+                      {DAY_NAMES[dayIndex]}
                       <span className={`ml-1 ${isSelected ? 'text-[#4A6B4A]' : 'text-[#6B7B6B]'}`}>{date.getDate()}</span>
                     </div>
                     <input

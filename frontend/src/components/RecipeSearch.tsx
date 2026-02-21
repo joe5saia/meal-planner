@@ -53,19 +53,19 @@ export function RecipeSearch({ onRecipeSaved }: RecipeSearchProps) {
     <div className="bg-[#FAFAF7] rounded-lg shadow p-6">
       <h2 className="text-xl font-semibold text-[#2D3B2D] mb-4">Add Recipe</h2>
 
-      <form onSubmit={handleScrape} className="flex gap-2 mb-4">
+      <form onSubmit={handleScrape} className="mb-4 flex flex-col gap-2 sm:flex-row">
         <input
           type="url"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           placeholder="Paste recipe URL..."
-          className="flex-1 px-4 py-2 border border-[#D8DCD0] rounded-lg focus:ring-2 focus:ring-[#6B8E6B] focus:border-transparent bg-white"
+          className="w-full flex-1 rounded-lg border border-[#D8DCD0] bg-white px-4 py-2 focus:border-transparent focus:ring-2 focus:ring-[#6B8E6B]"
           required
         />
         <button
           type="submit"
           disabled={loading}
-          className="px-6 py-2 bg-[#6B8E6B] text-white rounded-lg hover:bg-[#4A6B4A] disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full rounded-lg bg-[#6B8E6B] px-6 py-2 text-white hover:bg-[#4A6B4A] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
         >
           {loading ? 'Scraping...' : 'Get Recipe'}
         </button>
@@ -73,7 +73,7 @@ export function RecipeSearch({ onRecipeSaved }: RecipeSearchProps) {
           type="button"
           onClick={handleSave}
           disabled={!scrapedRecipe || saving}
-          className="px-6 py-2 bg-[#6B8E6B] text-white rounded-lg hover:bg-[#4A6B4A] disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full rounded-lg bg-[#6B8E6B] px-6 py-2 text-white hover:bg-[#4A6B4A] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
         >
           {saving ? 'Saving...' : 'Save Recipe'}
         </button>
@@ -87,22 +87,26 @@ export function RecipeSearch({ onRecipeSaved }: RecipeSearchProps) {
 
       {scrapedRecipe && (
         <div className="border border-[#D8DCD0] rounded-lg p-4 bg-white">
-          <div className="flex gap-4">
+          <div className="flex flex-col gap-4 sm:flex-row">
             {scrapedRecipe.image_url && (
               <img
                 src={scrapedRecipe.image_url}
                 alt={scrapedRecipe.title}
-                className="w-32 h-32 object-cover rounded-lg"
+                width={320}
+                height={180}
+                loading="lazy"
+                decoding="async"
+                className="h-48 w-full rounded-lg object-cover sm:h-32 sm:w-32"
               />
             )}
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               <h3 className="text-lg font-semibold text-[#2D3B2D]">{scrapedRecipe.title}</h3>
               {scrapedRecipe.description && (
                 <p className="text-[#6B7B6B] text-sm mt-1 line-clamp-2">
                   {scrapedRecipe.description}
                 </p>
               )}
-              <div className="flex gap-4 mt-2 text-sm text-[#6B7B6B]">
+              <div className="mt-2 flex flex-wrap gap-4 text-sm text-[#6B7B6B]">
                 {scrapedRecipe.prep_time && <span>Prep: {scrapedRecipe.prep_time}</span>}
                 {scrapedRecipe.cook_time && <span>Cook: {scrapedRecipe.cook_time}</span>}
                 {scrapedRecipe.servings && <span>Serves: {scrapedRecipe.servings}</span>}

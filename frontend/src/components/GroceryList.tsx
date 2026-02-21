@@ -16,6 +16,8 @@ const SECTION_ORDER = [
 ];
 
 type SortOption = 'alpha-asc' | 'alpha-desc' | 'by-section';
+const INITIAL_VISIBLE_ITEM_COUNT = 120;
+const VISIBLE_ITEM_INCREMENT = 120;
 
 interface GroceryListProps {
   recipeIds?: number[];
@@ -28,38 +30,56 @@ export function GroceryList({ recipeIds }: GroceryListProps) {
   const [checkedItems, setCheckedItems] = useState<Set<string>>(new Set());
   const [deletedItems, setDeletedItems] = useState<Set<string>>(new Set());
   const [sortOption, setSortOption] = useState<SortOption>('alpha-asc');
+  const [visibleItemCount, setVisibleItemCount] = useState(INITIAL_VISIBLE_ITEM_COUNT);
 
   useEffect(() => {
-    if (recipeIds && recipeIds.length > 0) {
-      fetchGroceryList();
+    if (!recipeIds || recipeIds.length === 0) {
+      return;
     }
+
+    let isCancelled = false;
+
+    async function fetchGroceryListForRecipes(): Promise<void> {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const list = await api.grocery.generate(recipeIds);
+        if (isCancelled) {
+          return;
+        }
+
+        setGroceryList(list);
+        setCheckedItems(new Set());
+        setDeletedItems(new Set());
+      } catch (err) {
+        if (!isCancelled) {
+          setError(err instanceof Error ? err.message : 'Failed to generate list');
+        }
+      } finally {
+        if (!isCancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    void fetchGroceryListForRecipes();
+
+    return () => {
+      isCancelled = true;
+    };
   }, [recipeIds]);
 
-  const fetchGroceryList = async () => {
-    if (!recipeIds || recipeIds.length === 0) return;
-
-    setLoading(true);
-    setError(null);
-    try {
-      const list = await api.grocery.generate(recipeIds);
-      setGroceryList(list);
-      setCheckedItems(new Set());
-      setDeletedItems(new Set());
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate list');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const toggleItem = (name: string) => {
-    const newChecked = new Set(checkedItems);
-    if (newChecked.has(name)) {
-      newChecked.delete(name);
-    } else {
-      newChecked.add(name);
-    }
-    setCheckedItems(newChecked);
+    setCheckedItems((previousChecked) => {
+      const nextChecked = new Set(previousChecked);
+      if (nextChecked.has(name)) {
+        nextChecked.delete(name);
+      } else {
+        nextChecked.add(name);
+      }
+      return nextChecked;
+    });
   };
 
   const deleteItem = (name: string) => {
@@ -72,7 +92,7 @@ export function GroceryList({ recipeIds }: GroceryListProps) {
   };
 
   const deleteAllChecked = () => {
-    setDeletedItems(prev => new Set([...prev, ...checkedItems]));
+    setDeletedItems((prev) => new Set([...prev, ...checkedItems]));
     setCheckedItems(new Set());
   };
 
@@ -117,17 +137,26 @@ export function GroceryList({ recipeIds }: GroceryListProps) {
     }
   }, [visibleItems, sortOption]);
 
+  const renderedSortedItems = useMemo(
+    () => sortedItems.slice(0, visibleItemCount),
+    [sortedItems, visibleItemCount]
+  );
+
   const groupedItems = useMemo(() => {
     if (sortOption !== 'by-section') return null;
     
     const groups: Record<string, GroceryItem[]> = {};
-    for (const item of sortedItems) {
+    for (const item of renderedSortedItems) {
       const section = item.category || 'Other';
       if (!groups[section]) groups[section] = [];
       groups[section].push(item);
     }
     return groups;
-  }, [sortedItems, sortOption]);
+  }, [renderedSortedItems, sortOption]);
+
+  useEffect(() => {
+    setVisibleItemCount(INITIAL_VISIBLE_ITEM_COUNT);
+  }, [sortOption, groceryList?.items.length, recipeIds]);
 
   const copyToClipboard = () => {
     if (!groceryList) return;
@@ -150,14 +179,15 @@ export function GroceryList({ recipeIds }: GroceryListProps) {
     );
   }
 
-  const renderItem = (item: GroceryItem, index: number) => {
+  const renderItem = (item: GroceryItem) => {
     const qty = formatQuantity(item);
     const isChecked = checkedItems.has(item.name);
     
     return (
       <div
-        key={index}
+        key={item.name}
         className="flex items-center gap-3 py-2 px-1 rounded-md hover:bg-[#F0F0E8] group transition-colors"
+        style={{ contentVisibility: 'auto', containIntrinsicSize: '44px' }}
       >
         <input
           type="checkbox"
@@ -245,7 +275,7 @@ export function GroceryList({ recipeIds }: GroceryListProps) {
                       {section}
                     </h3>
                     <div className="space-y-0">
-                      {items.map((item, i) => renderItem(item, i))}
+                      {items.map((item) => renderItem(item))}
                     </div>
                   </div>
                 );
@@ -253,7 +283,19 @@ export function GroceryList({ recipeIds }: GroceryListProps) {
             </div>
           ) : (
             <div className="space-y-2">
-              {sortedItems.map((item, i) => renderItem(item, i))}
+              {renderedSortedItems.map((item) => renderItem(item))}
+            </div>
+          )}
+
+          {renderedSortedItems.length < sortedItems.length && (
+            <div className="mt-4 flex justify-center">
+              <button
+                type="button"
+                onClick={() => setVisibleItemCount((count) => count + VISIBLE_ITEM_INCREMENT)}
+                className="rounded-md border border-[#D8DCD0] px-3 py-2 text-[0.8rem] text-[#2D3B2D] hover:bg-[#F0F0E8]"
+              >
+                Show More Items ({sortedItems.length - renderedSortedItems.length} remaining)
+              </button>
             </div>
           )}
 

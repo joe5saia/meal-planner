@@ -169,8 +169,8 @@ describe('WeeklyPlanner', () => {
     const twoWeekButton = screen.getByRole('button', { name: '2W' });
     const oneWeekButton = screen.getByRole('button', { name: '1W' });
 
-    expect(twoWeekButton.className).toContain('bg-emerald-600');
-    expect(oneWeekButton.className).not.toContain('bg-emerald-600');
+    expect(twoWeekButton.className).toContain('bg-[#6B8E6B]');
+    expect(oneWeekButton.className).not.toContain('bg-[#6B8E6B]');
   });
 
   it('fetches data for correct date range based on weeksToShow', async () => {
